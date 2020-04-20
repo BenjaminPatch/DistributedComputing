@@ -7,8 +7,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
 
-public class AllSensors {
+import com.zeroc.Ice.Communicator;
 
+import EnviroSmart.TemperatureManagerPrx;
+
+public class AllSensors {
+	
 	public static void main(String[] args) throws InterruptedException {
 		if (args.length != 1) {
 			System.out.println("Incorrect arg(s) for AllSensors");
@@ -24,8 +28,10 @@ public class AllSensors {
 	}
 
 	private static class SensorThread extends Thread {
+		private Communicator communicator;
 		private String filename;
 		final Consumer<String> function;
+
 		private SensorThread(String name, String type) {
 			switch (type) {
 			case "APSensor":
@@ -49,15 +55,24 @@ public class AllSensors {
 			start();
 		}
 		
-		private static void apSensor(String allLines) {
+		private static void apSensor(String line) {
 			System.out.println("In APSensor");
 		}
 
-		private static void temperatureSensor(String allLines) {
+		private static void temperatureSensor(String line) {
 			System.out.println("In tempSensor");
+			Communicator communicator = com.zeroc.Ice.Util.initialize();
+	    	communicator = com.zeroc.Ice.Util.initialize();
+	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("TempManagerWorker:default -p 10001");
+	    	TemperatureManagerPrx prx = TemperatureManagerPrx.checkedCast(base);
+	    	
+	    	if (prx == null) {
+	    		System.out.println("PRX == NULL");
+	    	}
+	    	prx.processTemperature(Integer.parseInt(line));
 		}
 
-		private static void locationSensor(String allLines) {
+		private static void locationSensor(String line) {
 			System.out.println("In locationSensor");
 		}
 
