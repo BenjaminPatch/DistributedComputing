@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 
 import com.zeroc.Ice.Communicator;
 
+import EnviroSmart.APManagerPrx;
 import EnviroSmart.TemperatureManagerPrx;
 
 public class AllSensors {
@@ -19,12 +20,116 @@ public class AllSensors {
 			System.exit(1);
 		}
 
-		new SensorThread(args[0], "TemperatureSensor");
-		new SensorThread(args[0], "APSensor");
-		new SensorThread(args[0], "LocationSensor");
+		new TemperatureSensor(args[0]);
+		new APSensor(args[0]);
 		for (int i = 0 ; i < 8; i++) {
 			System.out.println("IN MAIN");
 		}
+	}
+	
+	private static void iterateThroughLines(List<String> allLines, Consumer<String> function, Communicator communicator) {
+		for (String line:allLines) {
+			String[] splitLine = line.split(",");
+			if (splitLine.length != 2) {
+				// TODO: Discussion board question: handle
+				// https://learn.uq.edu.au/webapps/discussionboard/do/message?action=list_messages&course_id=_128088_1&nav=discussion_board_entry&conf_id=_378320_1&forum_id=_441002_1&message_id=_1166089_1
+			}
+			for (int i = 0; i < Integer.parseInt(splitLine[1]); i++) {
+				try {
+					function.accept(splitLine[0]);
+					Thread.sleep(1000);
+				} catch (NumberFormatException e) {
+					System.err.println("data file not of correct format");
+					communicator.shutdown();
+				} catch (InterruptedException e) {
+					communicator.shutdown();
+				}
+			}
+		}
+	}
+	
+	private static class TemperatureSensor extends Thread {
+		private Communicator communicator;
+		private String filename;
+		private TemperatureManagerPrx prx;
+		final Consumer<String> function;
+		
+		private TemperatureSensor(String name) {
+			filename = name + "Temperature.txt";
+			communicator = com.zeroc.Ice.Util.initialize();
+	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("TempManagerWorker:default -p 10014");
+	    	prx = TemperatureManagerPrx.checkedCast(base);
+	    	function = prx::processTemperature;
+	    	
+	    	if (prx == null) {
+	    		System.err.println("PRX == NULL");
+	    	}
+	    	start();
+		}
+		
+		public void run() {
+			List <String> allLines = generateLines(filename);
+			System.out.println("In tempSensor");
+			while (true) {
+				iterateThroughLines(allLines, function, communicator);
+			}
+		}
+		
+		public void shutdown() {
+			communicator.shutdown();
+			System.exit(0);
+		}
+	}
+
+	private static class APSensor extends Thread {
+		private Communicator communicator;
+		private String filename;
+		private APManagerPrx prx;
+		final Consumer<String> function;
+		
+		private APSensor(String name) {
+			filename = name + "AQI.txt";
+			communicator = com.zeroc.Ice.Util.initialize();
+	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("APManagerWorker:default -p 10014");
+	    	prx = APManagerPrx.checkedCast(base);
+	    	function = prx::processAQI;
+	    	
+	    	if (prx == null) {
+	    		System.err.println("PRX == NULL");
+	    	}
+	    	start();
+		}
+		
+		public void run() {
+			List <String> allLines = generateLines(filename);
+			System.out.println("In apSensor");
+			while (true) {
+				iterateThroughLines(allLines, function, communicator);
+			}
+		}
+		
+		public void shutdown() {
+			communicator.shutdown();
+			System.exit(0);
+		}
+	}
+	
+	private static List<String> generateLines(String filename) {
+		List<String> allLines = new LinkedList<>();
+		// Read all lines into LinkedList
+		try {
+			BufferedReader reader = new BufferedReader(new FileReader(filename));
+			String line = reader.readLine();
+			while (line != null) {
+				allLines.add(line);
+				line = reader.readLine();
+			}
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		return allLines;
 	}
 
 	private static class SensorThread extends Thread {
@@ -33,43 +138,12 @@ public class AllSensors {
 		final Consumer<String> function;
 
 		private SensorThread(String name, String type) {
-			switch (type) {
-			case "APSensor":
-				this.filename = name + "AQI.txt";
-				function = SensorThread::apSensor;
-				break;
-			case "TemperatureSensor":
-				this.filename = name + "Temperature.txt";
-				function = SensorThread::temperatureSensor;
-				break;
-			case "LocationSensor":
-				this.filename = name + "Location.txt";
-				function = SensorThread::locationSensor;
-				break;
-			default:
-				// System.err.println("Fatal: Incorrect sensor name given.");
-				// TODO: 6.1: Error handling
-				function = null;
-				System.exit(1);
-			}
+			this.function = null;
 			start();
 		}
 		
 		private static void apSensor(String line) {
 			System.out.println("In APSensor");
-		}
-
-		private static void temperatureSensor(String line) {
-			System.out.println("In tempSensor");
-			Communicator communicator = com.zeroc.Ice.Util.initialize();
-	    	communicator = com.zeroc.Ice.Util.initialize();
-	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("TempManagerWorker:default -p 10001");
-	    	TemperatureManagerPrx prx = TemperatureManagerPrx.checkedCast(base);
-	    	
-	    	if (prx == null) {
-	    		System.out.println("PRX == NULL");
-	    	}
-	    	prx.processTemperature(Integer.parseInt(line));
 		}
 
 		private static void locationSensor(String line) {
