@@ -13,6 +13,7 @@ import com.zeroc.IceStorm.TopicPrx;
 import EnviroSmart.TemperatureManager;
 
 public class ContextManager {
+
     public static class TempManagerI implements TemperatureManager {
 
 		@Override
@@ -24,59 +25,8 @@ public class ContextManager {
     private static TopicPrx tempProxy;
     private TopicPrx locProxy;
     private TopicPrx aqiProxy;
-
-	public static int run(Communicator communicator, Thread destroyHook, String[] args) {
-        System.out.println("start");
-		com.zeroc.IceStorm.TopicManagerPrx manager = com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
-	            communicator.propertyToProxy("TopicManager.Proxy"));
-        if(manager == null) {
-            System.err.println("invalid proxy");
-            return 1;
-        }
-        System.out.println("1");
-        tempProxy = getTopic("tempSensor", communicator, manager);
-        // ObjectPrx tempSub = getSubscriber(tempProxy, "EnviroSmart.TemperatureManager", new TempManagerI(), communicator);
-        com.zeroc.Ice.ObjectAdapter adapter = 
-        		communicator.createObjectAdapter("EnviroSmart.TemperatureManager");
-        
-        com.zeroc.Ice.Identity id = new com.zeroc.Ice.Identity(null, "");
-        id.name = java.util.UUID.randomUUID().toString();
-
-        ObjectPrx subscriber = adapter.add(new TempManagerI(), id);
-        adapter.activate();
-        subscriber = subscriber.ice_oneway();
-       
-        try {
-            tempProxy.subscribeAndGetPublisher(new HashMap<String, String>(),
-                    subscriber);
-        } catch (AlreadySubscribed e) {
-        	System.out.println("alreadysubbed");
-        } catch (BadQoS e) {
-        	System.out.println("BadQos");
-        } catch (InvalidSubscriber e) {
-        	System.out.println("Invalid Subscriber");
-        	e.printStackTrace();
-        }
-
-        //
-        // Replace the shutdown hook to unsubscribe during JVM shutdown
-        //
-        final com.zeroc.IceStorm.TopicPrx topicF = tempProxy;
-        final com.zeroc.Ice.ObjectPrx subscriberF = subscriber;
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-            	System.out.println("UNSUB");
-                topicF.unsubscribe(subscriberF);
-            } finally {
-                communicator.destroy();
-            }
-        }));
-        Runtime.getRuntime().removeShutdownHook(destroyHook); // remove old destroy-only shutdown hook
-		return 0;
-	}
 	
     public static void main(String[] args) {
-    	System.out.println("Starting contextmanager");
         if (args.length != 1) {
             System.err.println("usage: ContextManager.java [filename]");
             System.exit(1);
@@ -84,7 +34,7 @@ public class ContextManager {
 		java.util.List<String> extraArgs = new java.util.ArrayList<String>();
 		Communicator communicator = 
 				com.zeroc.Ice.Util.initialize(args, "configfiles\\config.sub");
-		System.out.println("In cont manager main: " + communicator);
+
 		//
         // Destroy communicator during JVM shutdown
         //
@@ -101,9 +51,33 @@ public class ContextManager {
             ex.printStackTrace();
             status = 1;
         }
-        System.out.println("Done in cont manager");
-        // System.exit(status);
     }
+
+	public static int run(Communicator communicator, Thread destroyHook, String[] args) {
+		com.zeroc.IceStorm.TopicManagerPrx manager = com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
+	            communicator.propertyToProxy(PROXY));
+        if(manager == null) {
+            System.err.println("invalid proxy");
+            return 1;
+        }
+        tempProxy = getTopic("tempSensor", communicator, manager);
+        ObjectPrx tempSub = getSubscriber(tempProxy, "EnviroSmart.TemperatureManager", new TempManagerI(), communicator);
+
+        //
+        // Replace the shutdown hook to unsubscribe during JVM shutdown
+        //
+        final com.zeroc.IceStorm.TopicPrx topicF = tempProxy;
+        final com.zeroc.Ice.ObjectPrx subscriberF = tempSub;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                topicF.unsubscribe(subscriberF);
+            } finally {
+                communicator.destroy();
+            }
+        }));
+        Runtime.getRuntime().removeShutdownHook(destroyHook); // remove old destroy-only shutdown hook
+		return 0;
+	}
 	
 	static TopicPrx getTopic(String topic, Communicator communicator, com.zeroc.IceStorm.TopicManagerPrx manager) {
         if(manager == null) {
@@ -116,7 +90,6 @@ public class ContextManager {
         //
         // Retrieve the topic.
         //
-		System.out.println("c");
         try {
             topicObj = manager.retrieve(topic);
         }
@@ -129,7 +102,6 @@ public class ContextManager {
                 return null;
             }
         }
-		System.out.println("d");
 		return topicObj;
 	}
 
@@ -150,7 +122,6 @@ public class ContextManager {
             topic.subscribeAndGetPublisher(new HashMap<String, String>(),
                     subscriber);
         } catch (AlreadySubscribed e) {
-        	System.out.println("alreadysubbed");
             return subscriber;
         } catch (BadQoS e) {
         	System.out.println("BadQos");

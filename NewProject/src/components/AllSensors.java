@@ -24,18 +24,11 @@ public class AllSensors {
 			System.exit(1);
 		}
 
-		/*
-		new TemperatureSensor(args[0]);
-		new APSensor(args[0]);
-		new LocationSensor(args[0]);
-		*/
         int status = 0;
-
         //
         // Try with resources block - communicator is automatically destroyed
         // at the end of this try block
         //
-        System.out.println("a");
         try(com.zeroc.Ice.Communicator communicator = 
         		com.zeroc.Ice.Util.initialize(args, "configfiles\\config.pub")) {
             //
@@ -44,79 +37,63 @@ public class AllSensors {
             //
             Runtime.getRuntime().addShutdownHook(new Thread(() -> communicator.destroy()));
 
-            status = run(communicator);
-            System.out.println(status);
+            new TemperatureSensor(args[0], communicator);
         }
-        System.out.println("b");
-        System.exit(status);
-	}
-	
-	private static int run(com.zeroc.Ice.Communicator communicator) {
-		com.zeroc.IceStorm.TopicManagerPrx manager = com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
-	            communicator.propertyToProxy("TopicManager.Proxy"));
-	    if(manager == null) {
-            System.err.println("invalid proxy");
-            return 1;
-        }
-	    //
-        // Retrieve the topic.
-        //
-        com.zeroc.IceStorm.TopicPrx topic;
-        try
-        {
-            topic = manager.retrieve("tempSensor");
-        }
-        catch(com.zeroc.IceStorm.NoSuchTopic e)
-        {
-            try
-            {
-                topic = manager.create("tempSensor");
-            }
-            catch(com.zeroc.IceStorm.TopicExists ex)
-            {
-                System.err.println("temporary failure, try again.");
-                return 1;
-            }
-        }
-        com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
-        TemperatureManagerPrx tempManager = TemperatureManagerPrx.uncheckedCast(publisher);
-        while (!communicator.isShutdown()) {
-        	tempManager.processTemperature("YEETUS");
-			System.out.println("sending yeetus");
-        	try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				System.err.println("interrupted");
-			}
-        }
-		return 0;
 	}
 	
 	private static class TemperatureSensor extends Thread {
 		private Communicator communicator;
 		private String filename;
-		private TemperatureManagerPrx prx;
-		final Consumer<String> function;
+		private TemperatureManagerPrx tempManager;
+		private Consumer<String> function;
 		
-		private TemperatureSensor(String name) {
+		private TemperatureSensor(String name, com.zeroc.Ice.Communicator communicator) {
+			communicator = 
+	        		com.zeroc.Ice.Util.initialize(new String[] {name}, "configfiles\\config.pub");
+			System.out.println("1");
+			this.function = null;
 			filename = name + "Temperature.txt";
-			communicator = com.zeroc.Ice.Util.initialize();
-	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("TempManagerWorker:default -p 10014");
-	    	prx = TemperatureManagerPrx.checkedCast(base);
-	    	function = prx::processTemperature;
-	    	
-	    	if (prx == null) {
-	    		System.err.println("PRX == NULL");
-	    	}
+	    	this.communicator = communicator;
+			com.zeroc.IceStorm.TopicManagerPrx manager = 
+					com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
+					communicator.propertyToProxy("TopicManager.Proxy"));
+			System.out.println("2");
+			if(manager == null) {
+				System.err.println("invalid proxy");
+				return;
+			}
+			//
+			// Retrieve the topic.
+			//
+			com.zeroc.IceStorm.TopicPrx topic;
+			try {
+				topic = manager.retrieve("tempSensor");
+			} catch(com.zeroc.IceStorm.NoSuchTopic e) {
+				System.out.println("3 nosuchtopic");
+				try {
+					topic = manager.create("tempSensor");
+				} catch(com.zeroc.IceStorm.TopicExists i) {
+					System.err.println("temporary failure, try again.");
+					return;
+				}
+			}
+			System.out.println("4");
+			com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
+			tempManager = TemperatureManagerPrx.uncheckedCast(publisher);
+	    	this.function = tempManager::processTemperature;
+			
 	    	start();
 		}
 		
 		public void run() {
+			System.out.println("boom");
 			List <String> allLines = Util.generateLines(filename);
+			System.out.println("boom");
 			while (!communicator.isShutdown()) {
+				System.out.println("6");
 				Util.iterateThroughLines(allLines, function, communicator);
 			}
+			System.out.println("7");
 		}
 		
 		public void shutdown() {

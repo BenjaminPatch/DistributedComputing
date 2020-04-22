@@ -24,8 +24,4 @@ module EnviroSmart
     {
     	void processLocation(string loc);
     }
-    interface Clock
-    {
-        void tick(string time);
-    }
 }
