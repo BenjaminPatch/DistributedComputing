@@ -10,42 +10,87 @@ import java.util.function.Consumer;
 import com.zeroc.Ice.Communicator;
 
 import EnviroSmart.APManagerPrx;
+import EnviroSmart.LocationManagerPrx;
+import EnviroSmart.LocationServerPrx;
 import EnviroSmart.TemperatureManagerPrx;
+
+import components.Util;
 
 public class AllSensors {
 	
 	public static void main(String[] args) throws InterruptedException {
 		if (args.length != 1) {
-			System.out.println("Incorrect arg(s) for AllSensors");
+			System.err.println("Incorrect arg(s) for AllSensors");
 			System.exit(1);
 		}
 
+		/*
 		new TemperatureSensor(args[0]);
 		new APSensor(args[0]);
-		for (int i = 0 ; i < 8; i++) {
-			System.out.println("IN MAIN");
-		}
+		new LocationSensor(args[0]);
+		*/
+        int status = 0;
+
+        //
+        // Try with resources block - communicator is automatically destroyed
+        // at the end of this try block
+        //
+        System.out.println("a");
+        try(com.zeroc.Ice.Communicator communicator = 
+        		com.zeroc.Ice.Util.initialize(args, "configfiles\\config.pub")) {
+            //
+            // Install shutdown hook to (also) destroy communicator during JVM shutdown.
+            // This ensures the communicator gets destroyed when the user interrupts the application with Ctrl-C.
+            //
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> communicator.destroy()));
+
+            status = run(communicator);
+            System.out.println(status);
+        }
+        System.out.println("b");
+        System.exit(status);
 	}
 	
-	private static void iterateThroughLines(List<String> allLines, Consumer<String> function, Communicator communicator) {
-		for (String line:allLines) {
-			String[] splitLine = line.split(",");
-			if (splitLine.length != 2) {
-				// TODO: Discussion board question: handle
-				// https://learn.uq.edu.au/webapps/discussionboard/do/message?action=list_messages&course_id=_128088_1&nav=discussion_board_entry&conf_id=_378320_1&forum_id=_441002_1&message_id=_1166089_1
+	private static int run(com.zeroc.Ice.Communicator communicator) {
+		com.zeroc.IceStorm.TopicManagerPrx manager = com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
+	            communicator.propertyToProxy("TopicManager.Proxy"));
+	    if(manager == null) {
+            System.err.println("invalid proxy");
+            return 1;
+        }
+	    //
+        // Retrieve the topic.
+        //
+        com.zeroc.IceStorm.TopicPrx topic;
+        try
+        {
+            topic = manager.retrieve("tempSensor");
+        }
+        catch(com.zeroc.IceStorm.NoSuchTopic e)
+        {
+            try
+            {
+                topic = manager.create("tempSensor");
+            }
+            catch(com.zeroc.IceStorm.TopicExists ex)
+            {
+                System.err.println("temporary failure, try again.");
+                return 1;
+            }
+        }
+        com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
+        TemperatureManagerPrx tempManager = TemperatureManagerPrx.uncheckedCast(publisher);
+        while (!communicator.isShutdown()) {
+        	tempManager.processTemperature("YEETUS");
+			System.out.println("sending yeetus");
+        	try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				System.err.println("interrupted");
 			}
-			for (int i = 0; i < Integer.parseInt(splitLine[1]); i++) {
-				try {
-					function.accept(splitLine[0]);
-					Thread.sleep(1000);
-				} catch (NumberFormatException e) {
-					System.err.println("data file not of correct format");
-					communicator.shutdown();
-				} catch (InterruptedException e) {
-					communicator.shutdown();
-				}
-			}
-		}
+        }
+		return 0;
 	}
 	
 	private static class TemperatureSensor extends Thread {
@@ -68,10 +113,9 @@ public class AllSensors {
 		}
 		
 		public void run() {
-			List <String> allLines = generateLines(filename);
-			System.out.println("In tempSensor");
-			while (true) {
-				iterateThroughLines(allLines, function, communicator);
+			List <String> allLines = Util.generateLines(filename);
+			while (!communicator.isShutdown()) {
+				Util.iterateThroughLines(allLines, function, communicator);
 			}
 		}
 		
@@ -101,10 +145,9 @@ public class AllSensors {
 		}
 		
 		public void run() {
-			List <String> allLines = generateLines(filename);
-			System.out.println("In apSensor");
-			while (true) {
-				iterateThroughLines(allLines, function, communicator);
+			List <String> allLines = Util.generateLines(filename);
+			while (!communicator.isShutdown()) {
+				Util.iterateThroughLines(allLines, function, communicator);
 			}
 		}
 		
@@ -114,83 +157,36 @@ public class AllSensors {
 		}
 	}
 	
-	private static List<String> generateLines(String filename) {
-		List<String> allLines = new LinkedList<>();
-		// Read all lines into LinkedList
-		try {
-			BufferedReader reader = new BufferedReader(new FileReader(filename));
-			String line = reader.readLine();
-			while (line != null) {
-				allLines.add(line);
-				line = reader.readLine();
-			}
-			reader.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		return allLines;
-	}
-
-	private static class SensorThread extends Thread {
+	private static class LocationSensor extends Thread {
 		private Communicator communicator;
 		private String filename;
+		private LocationServerPrx prx;
 		final Consumer<String> function;
-
-		private SensorThread(String name, String type) {
-			this.function = null;
-			start();
+		
+		private LocationSensor(String name) {
+			filename = name + "Location.txt";
+			communicator = com.zeroc.Ice.Util.initialize();
+	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("LocationServer:default -p 10013");
+	    	prx = LocationServerPrx.checkedCast(base);
+	    	function = prx::processLocation;
+	    	
+	    	if (prx == null) {
+	    		System.err.println("PRX == NULL");
+	    	}
+	    	start();
 		}
 		
-		private static void apSensor(String line) {
-			System.out.println("In APSensor");
-		}
-
-		private static void locationSensor(String line) {
-			System.out.println("In locationSensor");
-		}
-
 		public void run() {
-			List<String> allLines = new LinkedList<>();
-			// Read all lines into LinkedList
-			try {
-				BufferedReader reader = new BufferedReader(new FileReader(filename));
-				String line = reader.readLine();
-				while (line != null) {
-					allLines.add(line);
-					System.out.println(line);
-					line = reader.readLine();
-				}
-				reader.close();
-			} catch (IOException e) {
-				e.printStackTrace();
+			List <String> allLines = Util.generateLines(filename);
+			while (!communicator.isShutdown()) {
+				Util.iterateThroughLines(allLines, function, communicator);
 			}
-			while (true) {
-				System.out.println("HELLO");
-				for (String line : allLines) {
-					String[] splitLine = line.split(",");
-					if (splitLine.length != 2) {
-						// TODO: Discussion board question: handle
-						// https://learn.uq.edu.au/webapps/discussionboard/do/message?action=list_messages&course_id=_128088_1&nav=discussion_board_entry&conf_id=_378320_1&forum_id=_441002_1&message_id=_1166089_1
-					}
-					int time = 0;
-					try {
-						time = Integer.parseInt(splitLine[1]);
-					} catch (NumberFormatException e) {
-						// TODO: Handle
-						System.exit(1);
-					}
-					for (int i = 0; i < time; i++) {
-						function.accept(splitLine[0]);
-						try {
-							Thread.sleep(1000);
-						} catch (InterruptedException e) {
-							System.err.println("Sensor Interrupted");
-							System.exit(1);
-						}
-					}
-				}
-			}
+		}
+		
+		public void shutdown() {
+			communicator.shutdown();
+			System.exit(0);
 		}
 	}
+	
 }
