@@ -1,6 +1,7 @@
 package components;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import com.zeroc.Ice.Communicator;
@@ -15,31 +16,69 @@ import components.Util;
 public class WeatherAlarm extends Thread {
 	private Communicator communicator;
 	private String filename;
-	private AlarmManagerPrx prx;
-	final Consumer<String> function;
+	private final String TOPIC_NAME = "weatherSensor";
+	AlarmManagerPrx alarmManager;
 	
-	private WeatherAlarm(String name) {
-		filename = name;
-		communicator = com.zeroc.Ice.Util.initialize();
-    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("WeatherAlarmManagerWorker:default -p 10014");
-    	prx = AlarmManagerPrx.checkedCast(base);
-    	function = prx::processAlarmMessage;
-    	
-    	if (prx == null) {
-    		System.err.println("PRX == NULL");
-    	}
-    	start();
+	public static void main(String[] args) {
+		if (args.length != 1) {
+			System.err.println("usage: WeatherAlarm.java filename");
+		}
+		new WeatherAlarm(args[0]);
 	}
 
+	private WeatherAlarm(String name) {
+		this.filename = name;
+		this.communicator = 
+				com.zeroc.Ice.Util.initialize(null, "configfiles\\config.pub");
+		com.zeroc.IceStorm.TopicManagerPrx manager = 
+				com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
+				communicator.propertyToProxy("TopicManager.Proxy"));
+		if(manager == null) {
+			System.err.println("invalid proxy");
+			return;
+		}
+
+		//
+		// Retrieve the topic.
+		//
+		com.zeroc.IceStorm.TopicPrx topic;
+		try {
+			topic = manager.retrieve(TOPIC_NAME);
+		} catch(com.zeroc.IceStorm.NoSuchTopic e) {
+			try {
+				topic = manager.create(TOPIC_NAME);
+			} catch(com.zeroc.IceStorm.TopicExists i) {
+				System.err.println("temporary failure, try again.");
+				return;
+			}
+		}
+
+		com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
+		this.alarmManager = AlarmManagerPrx.uncheckedCast(publisher);
+		start();
+	}
+	
 	public void run() {
 		List <String> allLines = Util.generateLines(filename);
 		while (!communicator.isShutdown()) {
-			Util.iterateThroughLines(allLines, function, communicator);
+			for (String line: allLines) {
+				try {
+					int code = Integer.parseInt(line);
+					if (code < 0 || code > 3) {
+						System.err.println("Error in weather alarm");
+						System.exit(1);
+					}
+				} catch (NumberFormatException e) {
+					System.err.println("Error in weather alarm");
+					System.exit(1);
+				}
+				alarmManager.processAlarmMessage(line);
+				try {
+					Thread.sleep(60 * 1000);
+				} catch (InterruptedException e1) {
+					e1.printStackTrace();
+				}
+			}
 		}
-	}
-		
-	public void shutdown() {
-		communicator.shutdown();
-		System.exit(0);
 	}
 }

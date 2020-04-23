@@ -5,13 +5,14 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.Map;
+import java.util.function.BiConsumer;
 
 import com.zeroc.Ice.Communicator;
 
 import EnviroSmart.APManagerPrx;
 import EnviroSmart.LocationManagerPrx;
-import EnviroSmart.LocationServerPrx;
+import EnviroSmart.PreLocationManagerPrx;
 import EnviroSmart.TemperatureManagerPrx;
 
 import components.Util;
@@ -37,27 +38,26 @@ public class AllSensors {
             //
             Runtime.getRuntime().addShutdownHook(new Thread(() -> communicator.destroy()));
 
-            new TemperatureSensor(args[0], communicator);
+            new TemperatureSensor(args[0]);
+            new APSensor(args[0]);
+            new LocationSensor(args[0]);
         }
 	}
 	
-	private static class TemperatureSensor extends Thread {
+	private static abstract class AbstractSensor extends Thread {
 		private Communicator communicator;
 		private String filename;
-		private TemperatureManagerPrx tempManager;
-		private Consumer<String> function;
-		
-		private TemperatureSensor(String name, com.zeroc.Ice.Communicator communicator) {
-			communicator = 
-	        		com.zeroc.Ice.Util.initialize(new String[] {name}, "configfiles\\config.pub");
-			System.out.println("1");
+		private String username;
+		private BiConsumer<String, String> function;
+
+		private AbstractSensor(String name, String topicName) {
+			this.username = name;
 			this.function = null;
-			filename = name + "Temperature.txt";
-	    	this.communicator = communicator;
+			this.communicator = 
+	        		com.zeroc.Ice.Util.initialize(null, "configfiles\\config.pub");
 			com.zeroc.IceStorm.TopicManagerPrx manager = 
 					com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
 					communicator.propertyToProxy("TopicManager.Proxy"));
-			System.out.println("2");
 			if(manager == null) {
 				System.err.println("invalid proxy");
 				return;
@@ -67,103 +67,98 @@ public class AllSensors {
 			//
 			com.zeroc.IceStorm.TopicPrx topic;
 			try {
-				topic = manager.retrieve("tempSensor");
+				topic = manager.retrieve(topicName);
 			} catch(com.zeroc.IceStorm.NoSuchTopic e) {
-				System.out.println("3 nosuchtopic");
 				try {
-					topic = manager.create("tempSensor");
+					topic = manager.create(topicName);
 				} catch(com.zeroc.IceStorm.TopicExists i) {
 					System.err.println("temporary failure, try again.");
 					return;
 				}
 			}
-			System.out.println("4");
-			com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
-			tempManager = TemperatureManagerPrx.uncheckedCast(publisher);
-	    	this.function = tempManager::processTemperature;
-			
-	    	start();
-		}
-		
-		public void run() {
-			System.out.println("boom");
-			List <String> allLines = Util.generateLines(filename);
-			System.out.println("boom");
-			while (!communicator.isShutdown()) {
-				System.out.println("6");
-				Util.iterateThroughLines(allLines, function, communicator);
-			}
-			System.out.println("7");
-		}
-		
-		public void shutdown() {
-			communicator.shutdown();
-			System.exit(0);
-		}
-	}
 
-	private static class APSensor extends Thread {
-		private Communicator communicator;
-		private String filename;
-		private APManagerPrx prx;
-		final Consumer<String> function;
+			com.zeroc.Ice.ObjectPrx publisher = topic.getPublisher().ice_oneway();
+
+			switch (topicName) {
+			case "tempSensor":
+				TemperatureManagerPrx tempManager;
+				tempManager = TemperatureManagerPrx.uncheckedCast(publisher);
+				this.filename = name + "Temperature.txt";
+				this.function = tempManager::processTemperature;
+				break;
+			case "preLocSensor":
+				PreLocationManagerPrx locManager;
+				locManager = PreLocationManagerPrx.uncheckedCast(publisher);
+				this.filename = name + "Location.txt";
+				this.function = locManager::processPreLocation;
+				break;
+			case "apSensor":
+				APManagerPrx apManager;
+				apManager = APManagerPrx.uncheckedCast(publisher);
+				this.filename = name + "AQI.txt";
+				this.function = apManager::processAQI;
+				break;
+			}
+			
+		}
 		
+		public void run() {
+			List <String> allLines = Util.generateLines(filename);
+			while (!communicator.isShutdown()) {
+				iterateThroughLines(username, allLines, function, this.communicator);
+			}
+		}
+		
+	}
+	
+	private static class TemperatureSensor extends AbstractSensor {
+
+		private TemperatureSensor(String name) {
+			super(name, "tempSensor");
+	    	start();
+		}
+	}
+	
+	private static class APSensor extends AbstractSensor {
+
 		private APSensor(String name) {
-			filename = name + "AQI.txt";
-			communicator = com.zeroc.Ice.Util.initialize();
-	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("APManagerWorker:default -p 10014");
-	    	prx = APManagerPrx.checkedCast(base);
-	    	function = prx::processAQI;
-	    	
-	    	if (prx == null) {
-	    		System.err.println("PRX == NULL");
-	    	}
+			super(name, "apSensor");
 	    	start();
-		}
-		
-		public void run() {
-			List <String> allLines = Util.generateLines(filename);
-			while (!communicator.isShutdown()) {
-				Util.iterateThroughLines(allLines, function, communicator);
-			}
-		}
-		
-		public void shutdown() {
-			communicator.shutdown();
-			System.exit(0);
 		}
 	}
 	
-	private static class LocationSensor extends Thread {
-		private Communicator communicator;
-		private String filename;
-		private LocationServerPrx prx;
-		final Consumer<String> function;
-		
+	private static class LocationSensor extends AbstractSensor {
+
 		private LocationSensor(String name) {
-			filename = name + "Location.txt";
-			communicator = com.zeroc.Ice.Util.initialize();
-	    	com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("LocationServer:default -p 10013");
-	    	prx = LocationServerPrx.checkedCast(base);
-	    	function = prx::processLocation;
-	    	
-	    	if (prx == null) {
-	    		System.err.println("PRX == NULL");
-	    	}
+			super(name, "preLocSensor");
 	    	start();
-		}
-		
-		public void run() {
-			List <String> allLines = Util.generateLines(filename);
-			while (!communicator.isShutdown()) {
-				Util.iterateThroughLines(allLines, function, communicator);
-			}
-		}
-		
-		public void shutdown() {
-			communicator.shutdown();
-			System.exit(0);
 		}
 	}
 	
+	static void iterateThroughLines(String username, List<String> allLines, BiConsumer<String, String> function, Communicator communicator) {
+		for (String line:allLines) {
+			String[] splitLine = line.split(",");
+			if (splitLine.length != 2) {
+				// TODO: Discussion board question: handle
+				// https://learn.uq.edu.au/webapps/discussionboard/do/message?action=list_messages&course_id=_128088_1&nav=discussion_board_entry&conf_id=_378320_1&forum_id=_441002_1&message_id=_1166089_1
+			}
+
+			for (int i = 0; i < Integer.parseInt(splitLine[1]); i++) {
+				if (communicator.isShutdown()) {
+					break;
+				}
+				try {
+					System.out.println("sending: " + splitLine[0] + function);
+					function.accept(username, splitLine[0]);
+					Thread.sleep(1000);
+				} catch (NumberFormatException e) {
+					System.err.println("data file not of correct format");
+					communicator.shutdown();
+				} catch (InterruptedException e) {
+					System.out.println("interrupted");
+					communicator.shutdown();
+				}
+			}
+		}
+	}
 }

@@ -5,10 +5,10 @@
 #
 EnviroSmart.Shutdown.Endpoints=tcp:udp
 EnviroSmart.TemperatureManager.Endpoints=tcp:udp
-EnviroSmart.LocationSensor.Endpoints=tcp:udp
-EnviroSmart.APSensor.Endpoints=tcp:udp
+EnviroSmart.LocationManager.Endpoints=tcp:udp
+EnviroSmart.PreLocationManager.Endpoints=tcp:udp
+EnviroSmart.APManager.Endpoints=tcp:udp
 EnviroSmart.WeatherAlarm.Endpoints=tcp:udp
-Clock.Subscriber.Endpoints=tcp:udp
 #
 # Only listen on the localhost interface by default.
 #
@@ -27,12 +27,12 @@ TopicManager.Proxy=EnviroSmart/TopicManager:default -h localhost -p 10000
 # 2 = like 1, but more detailed
 # 3 = like 2, but also trace data transfer
 #
-Ice.Trace.Network=1
+Ice.Trace.Network=2
 
 #
 # IceMX configuration.
 #
-Ice.Admin.Endpoints=tcp -h localhost -p 10004
+# Ice.Admin.Endpoints=tcp -h localhost -p 10004
 Ice.Admin.InstanceName=subscriber
 IceMX.Metrics.Debug.GroupBy=id
 IceMX.Metrics.ByParent.GroupBy=parent

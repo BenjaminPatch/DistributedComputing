@@ -2,17 +2,17 @@ module EnviroSmart
 {
     interface TemperatureManager
     {
-        void processTemperature(string temp);
+        void processTemperature(string name, string temp);
     }
     
     interface APManager
     {
-    	void processAQI(string aqi);
+    	void processAQI(string name, string aqi);
     }
     
     interface LocationManager
     {
-    	void processLocation(string loc);
+    	void processLocation(string name, string loc);
     }
     
     interface AlarmManager
@@ -20,8 +20,13 @@ module EnviroSmart
     	void processAlarmMessage(string alarm);
     }
     
-    interface LocationServer
+    interface PreLocationManager
     {
-    	void processLocation(string loc);
+    	void processPreLocation(string name, string loc);
+    }
+    
+    interface PreferenceManager
+    {
+    	void processPreferenceRequest(string req);
     }
 }
