@@ -99,7 +99,6 @@ public class AllSensors {
 				this.function = apManager::processAQI;
 				break;
 			}
-			
 		}
 		
 		public void run() {
@@ -127,11 +126,31 @@ public class AllSensors {
 		}
 	}
 	
-	private static class LocationSensor extends AbstractSensor {
+	private static class LocationSensor extends Thread {
+		Communicator communicator;
+		PreLocationManagerPrx locProxy;
+		String name;
+		private BiConsumer<String, String> function;
 
 		private LocationSensor(String name) {
-			super(name, "preLocSensor");
-	    	start();
+			this.name = name;
+			this.communicator = com.zeroc.Ice.Util.initialize(new String[] {name});
+			com.zeroc.Ice.ObjectPrx base = this.communicator.stringToProxy("LocationMiddleman:default -p 10023");
+			this.locProxy = PreLocationManagerPrx.checkedCast(base);
+			
+			if(this.locProxy == null)
+			{
+				throw new Error("Invalid proxy");
+			}
+			this.function = locProxy::processPreLocation;
+			start();
+		}
+		
+		public void run() {
+			List <String> allLines = Util.generateLines(this.name + "Location.txt");
+			while (!this.communicator.isShutdown()) {
+				iterateThroughLines(name, allLines, this.function, this.communicator);
+			}
 		}
 	}
 	

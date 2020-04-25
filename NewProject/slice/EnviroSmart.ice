@@ -5,6 +5,11 @@ module EnviroSmart
         void processTemperature(string name, string temp);
     }
     
+    interface InfoProvider
+    {
+    	string getInfoGivenLoc(string loc);
+    	
+    
     interface APManager
     {
     	void processAQI(string name, string aqi);
@@ -23,10 +28,12 @@ module EnviroSmart
     interface PreLocationManager
     {
     	void processPreLocation(string name, string loc);
+    	string respondToIndoorResponse(string indoorOrOutdoor);
     }
     
     interface PreferenceManager
     {
-    	void processPreferenceRequest(string req);
+    	string processPreferenceRequest(string name, string req);
+    	void shutdown();
     }
 }
