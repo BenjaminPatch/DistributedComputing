@@ -20,6 +20,8 @@ import EnviroSmart.TemperatureManager;
 import javafx.util.Pair;
 
 public class ContextManager {
+	
+	public static class InfoProvider 
 
     public static class TempManagerI implements TemperatureManager {
     	

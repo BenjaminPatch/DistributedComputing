@@ -15,7 +15,7 @@ public class EnviroAppUI {
         String name = reader.readLine();
         
         EnviroAppUI mainClient = new EnviroAppUI(name);
-        getOption(name);
+        mainClient.getOption();
 
     }
     
@@ -24,7 +24,7 @@ public class EnviroAppUI {
     	// TODO check if name exists
     }
     
-    private static void getOption(String name) {
+    private void getOption() {
      	System.out.println(name);
      	System.out.println("Context-aware Enviro Smart Application Main Menu");
      	System.out.println("--Please select an option--:");
@@ -45,10 +45,10 @@ public class EnviroAppUI {
 
         switch (line.toLowerCase()) {
         case "1":
-        	infoOnItem(name);
+        	infoOnItem();
         	break;
         case "2":	
-        	itemAtLoc(name);
+        	itemAtLoc();
         	break;
         case "e":
         	System.out.println("CLOSING, May take up to 60 seconds");
@@ -61,7 +61,7 @@ public class EnviroAppUI {
         }
     }
     
-    private static void infoOnItem(String name) {
+    private void infoOnItem() {
         BufferedReader reader =
         		new BufferedReader(new InputStreamReader(System.in));
 
@@ -75,7 +75,17 @@ public class EnviroAppUI {
         // TODO query context manager
     }
     
-    private static void itemAtLoc(String name) {
-    	
+    private void itemAtLoc() {
+        BufferedReader reader =
+        		new BufferedReader(new InputStreamReader(System.in));
+
+        String line;
+        try {
+			line = reader.readLine();
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+        // TODO query context manager
     }
 }
