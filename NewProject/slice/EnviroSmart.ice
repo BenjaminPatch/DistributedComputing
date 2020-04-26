@@ -8,7 +8,8 @@ module EnviroSmart
     interface InfoProvider
     {
     	string getInfoGivenLoc(string loc);
-    	string getInfoCurrentLoc (
+    	string getInfoCurrentLoc(string name);
+    }
     
     interface APManager
     {
