@@ -19,29 +19,59 @@ import com.zeroc.IceStorm.TopicPrx;
 
 import EnviroSmart.APManager;
 import EnviroSmart.AlarmManager;
-import EnviroSmart.InfoProvider;
 import EnviroSmart.LocationManager;
 import EnviroSmart.PreLocationManagerPrx;
 import EnviroSmart.PreferenceManagerPrx;
 import EnviroSmart.TemperatureManager;
+import EnviroSmart.UiInteractor;
 import javafx.util.Pair;
 
 public class ContextManager {
 	
-	public static class InfoProviderI implements InfoProvider {
+	public static class UiInteractorI implements UiInteractor {
+		private static Map<String, List<Location>> locs; // Stores the information about all locations
+		public UiInteractorI(String filename) {
+			locs = readCmFile(filename);
+		}
 
 		@Override
-		public String getInfoGivenLoc(String loc, Current current) {
-			// TODO Auto-generated method stub
+		public EnviroSmart.Location getInfoGivenLoc(String loc, Current current) {
+			for (String key:locs.keySet()) {
+				for (Location cur: locs.get(key)) {
+					if (cur.getName().equalsIgnoreCase(loc)) {
+						Object[] infoObj = cur.getInfo().toArray();
+						Object[] servicesObj = cur.getServices().toArray();
+						String[] info = 
+								  Arrays.copyOf(infoObj, infoObj.length, String[].class);
+						String[] services = 
+								  Arrays.copyOf(servicesObj, servicesObj.length, String[].class);
+						return new EnviroSmart.Location(loc, cur.getLocCode(), 
+								info, services);
+					}
+				}
+			}
 			return null;
 		}
 
 		@Override
 		public String getInfoCurrentLoc(String name, Current current) {
-			// TODO Auto-generated method stub
-			return null;
+			String loc = userLocations.get(name);
+			if (loc == "") {
+				return null;
+			}
+			String returnMessage = "";
+			List<Location> locNames = locs.get(loc);
+			for (Location cur : locNames) {
+				System.out.println(returnMessage);
+				returnMessage = returnMessage.concat(cur.getName() + ", ");
+			}
+			return returnMessage.substring(0, returnMessage.length() -2).trim();
 		}
-		
+
+		@Override
+		public void logIn(String name, Current current) {
+			userLocations.putIfAbsent(name, "");
+		}
 	}
 
     public static class TempManagerI implements TemperatureManager {
@@ -49,7 +79,6 @@ public class ContextManager {
 		@Override
 		public void processTemperature(String name, String temp, Current current) {
 			System.out.println("TEMP: " + temp);
-			apoThresholds.replace("HI", "YO");
 		}
     }
 
@@ -57,10 +86,6 @@ public class ContextManager {
 		@Override
 		public void processAQI(String name, String aqi, Current current) {
 			System.out.println("AQI: " + aqi);
-			System.out.println("HELLO2: " + getLocManager().getKey().respondToIndoorResponse("C"));
-			if (Math.random() * 10 > 7){
-				apoThresholds.replace("HI", "There");
-			}
 		}
     }
 
@@ -68,7 +93,11 @@ public class ContextManager {
 		@Override
 		public void processLocation(String name, String loc, Current current) {
 			System.out.println("LOC: " + loc + " " + name);
-			System.out.println("Checking apoThresholds: " + apoThresholds.get("HI"));
+			String previousLoc = userLocations.get(name);
+			if (previousLoc == null) {
+				return;
+			}
+			userLocations.put(name, loc);
 		}
     }
 
@@ -123,13 +152,6 @@ public class ContextManager {
             System.err.println("usage: ContextManager.java [filename]");
             System.exit(1);
         }
-		Map<String, Location> temp = readCmFile(args[0] + ".txt");
-		System.out.println("HI" + temp.get("D").getInfo());
-		try {
-			Thread.sleep(5000);
-		} catch (InterruptedException e) {
-			//
-		}
         tempThresholds = new HashMap<>();
         apoThresholds = new HashMap<>();
         userLocations = new HashMap<>();
@@ -146,7 +168,7 @@ public class ContextManager {
         int status = 0;
         try
         {
-            status = run(communicator, destroyHook);
+            status = run(communicator, destroyHook, args);
         }
         catch(Exception ex)
         {
@@ -155,9 +177,18 @@ public class ContextManager {
         }
     }
 
-	public static int run(Communicator communicator, Thread destroyHook) {
-		com.zeroc.IceStorm.TopicManagerPrx manager = com.zeroc.IceStorm.TopicManagerPrx.checkedCast(
-	            communicator.propertyToProxy(PROXY));
+	public static int run(Communicator communicator, Thread destroyHook, String[] args) {
+    	Communicator rmiCommunicator = com.zeroc.Ice.Util.initialize();
+    	
+        com.zeroc.Ice.ObjectAdapter rmiAdapter = 
+        		rmiCommunicator.createObjectAdapterWithEndpoints("locationInfo", "default -p 10055");
+        com.zeroc.Ice.Object objectJ = new UiInteractorI(args[0] + ".txt");
+
+        rmiAdapter.add(objectJ, com.zeroc.Ice.Util.stringToIdentity("infoProvider"));
+        rmiAdapter.activate();
+
+		com.zeroc.IceStorm.TopicManagerPrx manager = 
+				com.zeroc.IceStorm.TopicManagerPrx.checkedCast(communicator.propertyToProxy(PROXY));
         if(manager == null) {
             System.err.println("invalid proxy");
             return 1;
@@ -204,11 +235,16 @@ public class ContextManager {
             }
         }));
         Runtime.getRuntime().removeShutdownHook(destroyHook); // remove old destroy-only shutdown hook
+        rmiCommunicator.waitForShutdown();
 		return 0;
 	}
 	
-	private static Map<String, Location> readCmFile(String filename) {
-			Map<String, Location> newMap = new HashMap<>();
+	/**
+	 * Reads the file given to main as argument,
+	 * which has all locations and information about them.
+	 */
+	private static Map<String, List<Location>> readCmFile(String filename) {
+			Map<String, List<Location>> newMap = new HashMap<>();
 			
 			// Read all lines into LinkedList
 			try {
@@ -248,7 +284,7 @@ public class ContextManager {
 							if (!lineSplit[0].equalsIgnoreCase("information")) {
 								cmFileExit();
 							}
-							newLoc.addToInfo(lineSplit[1]);
+							newLoc.addToInfo(lineSplit[1].trim());
 							while (true) {
 								line = reader.readLine();
 								if (line == null) {
@@ -256,7 +292,7 @@ public class ContextManager {
 								}
 								lineSplit = line.split(":");
 								if (lineSplit.length == 1) {
-									newLoc.addToInfo(line);
+									newLoc.addToInfo(line.trim());
 								} else if (lineSplit[0].equalsIgnoreCase("services")) {
 									LinkedList<String> serv = new LinkedList<String>(Arrays.asList(lineSplit[1].split(",")));
 									newLoc.setServices(serv);
@@ -264,8 +300,13 @@ public class ContextManager {
 								}
 								
 							}
-						}					}
-					newMap.put(newLoc.getLocCode(), newLoc);
+						}
+					}
+					if (newMap.get(newLoc.getLocCode()) == null) {
+						newMap.put(newLoc.getLocCode(), new LinkedList<Location>(Arrays.asList(newLoc)));
+					} else {
+						newMap.get(newLoc.getLocCode()).add(newLoc);
+					}
 				}
 				reader.close();
 			} catch (IOException e) {

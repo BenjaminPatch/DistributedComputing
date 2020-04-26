@@ -1,14 +1,24 @@
 module EnviroSmart
 {
+	sequence<string> stringList;
     interface TemperatureManager
     {
         void processTemperature(string name, string temp);
     }
     
-    interface InfoProvider
+    struct Location
     {
-    	string getInfoGivenLoc(string loc);
+    	string name;
+		string locCode;
+		stringList info;
+		stringList services;
+	}
+    
+    interface UiInteractor
+    {
+    	Location getInfoGivenLoc(string loc);
     	string getInfoCurrentLoc(string name);
+    	void logIn(string name);
     }
     
     interface APManager
