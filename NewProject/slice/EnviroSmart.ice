@@ -18,7 +18,13 @@ module EnviroSmart
     {
     	Location getInfoGivenLoc(string loc);
     	string getInfoCurrentLoc(string name);
-    	void logIn(string name);
+    	bool logIn(string name);
+    }
+    
+    interface WarningGenerator
+    {
+    	void generateWarning(string type, int value, int threshold,
+    			string currentLocation, string suggestion, int weatherAlarm);
     }
     
     interface APManager
@@ -40,11 +46,13 @@ module EnviroSmart
     {
     	void processPreLocation(string name, string loc);
     	string respondToIndoorResponse(string indoorOrOutdoor);
+    	string getInOrOut(string locCode);
     }
     
     interface PreferenceManager
     {
     	string processPreferenceRequest(string name, string req);
+    	string getSuggestion(string nameAndEvent);
     	void shutdown();
     }
 }

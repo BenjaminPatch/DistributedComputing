@@ -63,80 +63,84 @@ public class LocationServer {
 
 		@Override
 		public void processPreLocation(String name, String loc, Current current) {
-			System.out.println("LOCATION RECEIVED: " + loc + ":" + getOutOrIndoorFromLoc(loc, locToInOutside));
+			System.out.println("LOCATION RECEIVED: " + loc + ":" + locToInOutside.get(loc));
 			locManager.processLocation(name, loc);
 		}
 
 		@Override
 		public String respondToIndoorResponse(String indoorOrOutdoor, Current current) {
 			System.out.println("indoor/outdoor response received: "  + indoorOrOutdoor);
-			return "69";
+			String returnValue = "";
+
+			for (String loc: inOutsideToLoc.get(indoorOrOutdoor)) {
+				returnValue.concat(loc + " ");
+			}
+
+			return returnValue;
 		}
 
-		private static String[] getLocsOfIndoorOrOutdoor(String inOrOut, Map<String, String[]> inOutsideToLoc) {
-			return inOutsideToLoc.get(inOrOut);
-		}
-
-		private static String getOutOrIndoorFromLoc(String loc, Map<String, String> locToInOutside) {
-			return locToInOutside.get(loc);
+		@Override
+		public String getInOrOut(String locCode, Current current) {
+			return locToInOutside.get(locCode);
 		}
 
 		private static void processLocationFile(String filename, Map<String, String[]> inOutsideToLoc, Map<String, String> locToInOutside) {
-			
-		String[] splitLine;
-		// Read all lines into LinkedList
-		try {
-			BufferedReader reader = new BufferedReader(new FileReader(filename));
-			// Read the first line
-			String line = reader.readLine();
-			splitLine = line.replaceAll(" ", "").split(":");
-			if (!splitLine[0].equals("Status") || !splitLine[1].equals("LocationCoordinates")
-					|| splitLine.length != 2) {
-				System.err.println("Invalid location file");
-				System.exit(1);
-			}
+				
+			String[] splitLine;
+			// Read all lines into LinkedList
+			try {
+				BufferedReader reader = new BufferedReader(new FileReader(filename));
+				// Read the first line
+				String line = reader.readLine();
+				splitLine = line.replaceAll(" ", "").split(":");
+				if (!splitLine[0].equals("Status") || !splitLine[1].equals("LocationCoordinates")
+						|| splitLine.length != 2) {
+					System.err.println("Invalid location file");
+					System.exit(1);
+				}
 
-			// Process the second line
-			line = reader.readLine();
-			if (line == null) {
-				System.err.println("Invalid location file");
-				System.exit(1);
-			}
-			splitLine = line.replaceAll(" ", "").split(":");
-			if (splitLine.length != 2 
-					|| (!splitLine[0].equals("Indoor"))) {
-				System.err.println("Invalid location file");
-				System.exit(1);
-			}
-			String[] locations = splitLine[1].split(",");
-			inOutsideToLoc.put("indoor", locations);
-			for (String loc : locations) {
-				locToInOutside.put(loc, "indoor");
-			}
+				// Process the second line
+				line = reader.readLine();
+				if (line == null) {
+					System.err.println("Invalid location file");
+					System.exit(1);
+				}
+				splitLine = line.replaceAll(" ", "").split(":");
+				if (splitLine.length != 2 
+						|| (!splitLine[0].equals("Indoor"))) {
+					System.err.println("Invalid location file");
+					System.exit(1);
+				}
+				String[] locations = splitLine[1].split(",");
+				inOutsideToLoc.put("indoor", locations);
+				for (String loc : locations) {
+					locToInOutside.put(loc, "indoor");
+				}
 
-			// Process the third line
-			line = reader.readLine();
-			if (line == null) {
-				System.err.println("Invalid location file");
-				System.exit(1);
+				// Process the third line
+				line = reader.readLine();
+				if (line == null) {
+					System.err.println("Invalid location file");
+					System.exit(1);
+				}
+				splitLine = line.replaceAll(" ", "").split(":");
+				if (splitLine.length != 2 
+						|| (!splitLine[0].equals("Outdoor"))) {
+					System.err.println("Invalid location file");
+					System.exit(1);
+				}
+				locations = splitLine[1].split(",");
+				inOutsideToLoc.put("outdoor", locations);
+				for (String loc : locations) {
+					locToInOutside.put(loc, "outdoor");
+				}
+				reader.close();
+			} catch (IOException e) {
+				System.err.println("ioexception");
+				e.printStackTrace();
 			}
-			splitLine = line.replaceAll(" ", "").split(":");
-			if (splitLine.length != 2 
-					|| (!splitLine[0].equals("Outdoor"))) {
-				System.err.println("Invalid location file");
-				System.exit(1);
-			}
-			locations = splitLine[1].split(",");
-			inOutsideToLoc.put("outdoor", locations);
-			for (String loc : locations) {
-				locToInOutside.put(loc, "outdoor");
-			}
-			reader.close();
-		} catch (IOException e) {
-			System.err.println("ioexception");
-			e.printStackTrace();
 		}
-	}
+
 	}
 
 	private Communicator communicator;

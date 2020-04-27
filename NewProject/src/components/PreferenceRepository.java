@@ -22,15 +22,32 @@ public class PreferenceRepository {
 		private String filename;
 		private Communicator communicator;
 		private static final String MEDICAL_CONDITION = "med";
-		private static final String PREF1 = "pref1";
-		private static final String PREF2 = "pref2";
-		private static final String PREF3 = "pref3";
+		private static final String TEMP_PREF = "pref1";
+		private static final String APO_PREF = "pref2";
+		private static final String WEATHER_PREF = "pref3";
 		
 		public PreferenceManagerI(String filename, Communicator communicator) {
 			super();
 			this.filename = filename;
 			this.preferences = readPreferenceFile(filename);
 			System.out.println(this.preferences.get("bryan").getPref3());
+		}
+
+		@Override
+		public String getSuggestion(String nameAndEvent, Current current) {
+			String[] nameEvent = nameAndEvent.split(",");
+			Preference prefs = preferences.get(nameEvent[0].trim());
+			switch (nameEvent[1].trim().toLowerCase()) {
+			case "alarm":
+				return prefs.getMedicalCondition();
+			case "aqi":
+				return prefs.getPref2();
+			case "temp":
+				return prefs.getPref1().getValue();
+			default:
+				System.err.println("Error in suggestion request");
+			}
+			return null;
 		}
 		
 		@Override
@@ -43,11 +60,11 @@ public class PreferenceRepository {
 			switch (req) {
 			case MEDICAL_CONDITION:
 				return relevantPref.getMedicalCondition();
-			case PREF1:
+			case TEMP_PREF:
 				return (relevantPref.getPref1().getKey().toString() + ":" + relevantPref.getPref1().getValue().toString());
-			case PREF2:
+			case APO_PREF:
 				return relevantPref.getPref2();
-			case PREF3:
+			case WEATHER_PREF:
 				return relevantPref.getPref3();
 			default:
 				return null;
@@ -163,7 +180,7 @@ public class PreferenceRepository {
 			communicator.shutdown();
 			System.exit(0);
 		}
-		
+
 	}
 
 	private Communicator communicator;

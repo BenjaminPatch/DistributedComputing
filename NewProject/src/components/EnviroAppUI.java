@@ -5,13 +5,72 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 
 import com.zeroc.Ice.Communicator;
+import com.zeroc.Ice.Current;
 
 import EnviroSmart.UiInteractorPrx;
+import EnviroSmart.WarningGenerator;
+import javafx.scene.shape.Line;
+
+// TODO: When user exits, send logout message
 
 public class EnviroAppUI {
+	
+	public class WarningGeneratorI implements WarningGenerator {
+
+		@Override
+		public void generateWarning(String type, int value, int threshold, String currentLocation, String suggestion,
+				int weatherAlarm, Current current) {
+			if (type.equalsIgnoreCase("temp")) {
+				printTempWarning(value, threshold);
+			} else if (type.equalsIgnoreCase("aqi")) {
+				printAqiWarning(value, threshold);
+			} else if (type.equalsIgnoreCase("alarm")) {
+				printAlarm(value);
+			}
+
+			System.out.println("Current location: " + currentLocation);
+			
+			if (type.equalsIgnoreCase("temp")) {
+				System.out.printf("Current weather alarm status: ");
+				if (weatherAlarm != 0) {
+					System.out.println("alarm");
+				} else {
+					System.out.println("no alarm");
+				}
+			}
+
+			System.out.println(suggestion);
+			System.out.println();
+		}
+		
+		private void printTempWarning(int value, int threshold) {
+			System.out.println("Warning, TEMPERATURE is now " + value + " (" 
+					+ name + "'s limit is " + threshold + ")");
+		}
+
+		private void printAlarm(int value) {
+			String type;
+			if (value == 1) {
+				type = "HEAVY RAIN";
+			} else if (value == 2) {
+				type = "HAIL STORM";
+			} else if (value == 3) {
+				type = "STRONG WIND";
+			}
+			System.out.println("Warning, EXTREME WEATHER detected, "
+					+ "the current weather event is " + value);
+		}
+
+		private void printAqiWarning(int value, int threshold) {
+			System.out.println("Warning, SIGNIFICANT AIR POLUTION detected, "
+					+ "the current AQI is " + value + " (" + name + "'s limit is " + threshold + ")");
+		}
+	}
+	
 	private String name;
 	UiInteractorPrx provider;
 	Communicator communicator;
+	Communicator incCommunicator;
     
     public EnviroAppUI(String name) {
     	communicator = com.zeroc.Ice.Util.initialize();
@@ -22,10 +81,24 @@ public class EnviroAppUI {
         {
             throw new Error("Invalid proxy");
         }
-        provider.logIn(name);
+        if (!provider.logIn(name)) {
+        	System.out.println("Error: The provided name was not found. " +
+        			"Please check the name, restart the user interface, " +
+        			"and enter the name again.");
+        	System.exit(1);
+        }
+        
+        this.incCommunicator = com.zeroc.Ice.Util.initialize();
+    	
+        com.zeroc.Ice.ObjectAdapter adapter = this.incCommunicator.createObjectAdapterWithEndpoints("WarningGenerator", "default -p 10066");
+        com.zeroc.Ice.Object object = new WarningGeneratorI();
+
+        adapter.add(object, com.zeroc.Ice.Util.stringToIdentity("WarningGen"));
+        adapter.activate();
+        
+        System.out.println("Adapter activated. Waiting for data.");
 
     	this.name = name;
-    	// TODO check if name exists
     }
 
     public static void main(String[] args) throws IOException {
@@ -91,8 +164,8 @@ public class EnviroAppUI {
         EnviroSmart.Location response = provider.getInfoGivenLoc(line);
 
         if (response == null) {
-        	System.out.println("Could not find this location");
-        	return; //TODO loop
+        	System.out.println("No match found for item of interest");
+        	return;
         }
 
         System.out.println("Information about " + line + ":");
@@ -104,8 +177,13 @@ public class EnviroAppUI {
     private void itemAtLoc() {
         String response = provider.getInfoCurrentLoc(this.name);
         System.out.println("The following items of interest are in your location:");
-        System.out.println(response);
-        // TODO query context manager
+        if (response.length() == 0) {
+        	System.out.println("There are no items of interest in your current location.");
+        }
+        for (String line:response.split(",")) {
+        	System.out.println(line.trim());
+        }
+        System.out.println();
     }
     
     private void doLoop() {
