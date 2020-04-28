@@ -34,7 +34,7 @@ module EnviroSmart
     
     interface LocationManager
     {
-    	void processLocation(string name, string loc);
+    	void processLocation(string name, string loc, string indoorOutdoor);
     }
     
     interface AlarmManager

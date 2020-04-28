@@ -3,6 +3,8 @@ package components;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -33,6 +35,10 @@ public class ContextManager {
 
 		@Override
 		public EnviroSmart.Location getInfoGivenLoc(String loc, Current current) {
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received EnviroAppUI \"" + loc + "\"");
+
 			for (String key:locs.keySet()) {
 				for (Location cur: locs.get(key)) {
 					if (cur.getName().equalsIgnoreCase(loc)) {
@@ -52,6 +58,10 @@ public class ContextManager {
 
 		@Override
 		public String getInfoCurrentLoc(String name, Current current) {
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received EnviroAppUI \"" + name + "\"");
+
 			String loc = userLocations.get(name);
 			if (loc == "") {
 				return null;
@@ -67,15 +77,18 @@ public class ContextManager {
 
 		@Override
 		public boolean logIn(String name, Current current) {
-			// TODO map username to communicator/proxy to communicate with that UI
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received EnviroAppUI \"" + name + "\"");
+
 			PreferenceManagerPrx prefManager = getPrefRepo().getKey();
 			String tempPref = prefManager.processPreferenceRequest(name, "pref1");
 			if (tempPref == null) {
 				return false;
 			}
 			userLocations.putIfAbsent(name, ""); // managers now know to start
-			System.out.println("PUTTING" + name);
 			tempThresholds.put(name, Integer.parseInt(tempPref.split(":")[0]));
+			userComms.put(name, getWarningGen());
 			return true;
 		}
 	}
@@ -92,7 +105,6 @@ public class ContextManager {
 		public void processTemperature(String name, String temp, Current current) {
 			System.out.println("TEMP: " + temp);
 			Integer threshold = tempThresholds.get(name);
-			System.out.println("HELLO" + name + threshold);
 			if (threshold == null) {
 				return;
 			}
@@ -100,7 +112,7 @@ public class ContextManager {
 			
 			// Greater than threshold AND there has been a change
 			if (!isAboveThreshold && newTemp >= threshold && newTemp != userTemps.get(name)) {
-				getWarningGen().getKey().generateWarning(
+				userComms.get(name).getKey().generateWarning(
 						"temp", newTemp, threshold, userLocations.get(name), 
 						generateSuggestion(name, "temp"), weather);
 				isAboveThreshold = true;
@@ -121,10 +133,17 @@ public class ContextManager {
     	}
 		@Override
 		public void processAQI(String name, String aqi, Current current) {
-			System.out.println("AQI: " + aqi);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received \"" + name + aqi + "\"");
+
 
 			Pair<Integer, Integer> apoAndDuration = userApos.get(name);
 			int aqiInt = Integer.parseInt(aqi);
+
+			System.out.println(dtf.format(now) + " Sent LocationServer \"" + 
+					getLocManager().getKey().getInOrOut(userLocations.get(name) + "\""));
+
 			if (apoAndDuration == null || apoAndDuration.getKey() != aqiInt
 					|| getLocManager().getKey().getInOrOut(userLocations.get(name)).equalsIgnoreCase("indoor")) {
 				userApos.put(name, new Pair<>(aqiInt, 0));
@@ -156,7 +175,10 @@ public class ContextManager {
 				if (isAlreadyIn.get(name) == true) {
 					return;
 				}
-				getWarningGen().getKey().generateWarning("aqi", aqiInt,
+				System.out.println(dtf.format(now) + " Sent EnviroAppUi \"aqi " + aqi + 
+						" " + threshold + " " + userLocations.get(name) +  
+						generateSuggestion(name, "aqi") + weather + "\"");
+				userComms.get(name).getKey().generateWarning("aqi", aqiInt,
 						threshold, userLocations.get(name), generateSuggestion(name, "aqi"), weather);
 				isAlreadyIn.put(name, true);
 			} else {
@@ -167,7 +189,7 @@ public class ContextManager {
 
     public static class LocationManagerI implements LocationManager {
 		@Override
-		public void processLocation(String name, String loc, Current current) {
+		public void processLocation(String name, String loc, String indoorOutdoor, Current current) {
 			// TODO: Reset apo timer when location changes from indoor to outdoor
 			System.out.println("LOC: " + loc + " " + name);
 			String previousLoc = userLocations.get(name);
@@ -190,7 +212,7 @@ public class ContextManager {
 			int newWeather = Integer.parseInt(incomingWeather);
 			weather = newWeather;
 			for (String name: userLocations.keySet()) {
-				getWarningGen().getKey().generateWarning("alarm", newWeather, -1, userLocations.get(name), generateSuggestion(name, "alarm"), weather);
+				userComms.get(name).getKey().generateWarning("alarm", newWeather, -1, userLocations.get(name), generateSuggestion(name, "alarm"), weather);
 			}
 		}
     }
@@ -234,8 +256,19 @@ public class ContextManager {
     public static Pair<WarningGeneratorPrx, Communicator> getWarningGen() {
     	Communicator communicator = com.zeroc.Ice.Util.initialize();
   
+    	int port = 10066;
         
-        com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("WarningGen:default -p 10066");
+        com.zeroc.Ice.ObjectPrx base;
+    	while (true) {
+    		try {
+    			base = communicator.stringToProxy("WarningGen:default -p " + Integer.toString(port));
+    		} catch (com.zeroc.Ice.SocketException e) {
+        		port++;
+        		continue;
+        	}
+    		break;
+    	}
+    	System.out.println("PORT: " + port);
         WarningGeneratorPrx manager = WarningGeneratorPrx.checkedCast(base);
         
         if(manager == null) {
@@ -270,6 +303,7 @@ public class ContextManager {
     private static Map<String, String> userLocations; // Store users locs at any given time
     private static int weather; // Current weather condition
 	private static Map<String, List<Location>> locs; // Stores the information about all locations
+	private static Map<String, Pair<WarningGeneratorPrx, Communicator>> userComms;
 	
     public static void main(String[] args) {
         if (args.length != 1) {
@@ -281,6 +315,7 @@ public class ContextManager {
         userApos = new HashMap<>();
         userLocations = new HashMap<>();
         userTemps = new HashMap<>();
+		userComms = new HashMap<>();
 		locs = readCmFile(args[0] + ".txt");
 
 		Communicator communicator = 

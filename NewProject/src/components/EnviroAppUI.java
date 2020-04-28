@@ -73,6 +73,28 @@ public class EnviroAppUI {
 	Communicator incCommunicator;
     
     public EnviroAppUI(String name) {
+        
+        this.incCommunicator = com.zeroc.Ice.Util.initialize();
+        
+        int currentPort = 10066;
+    	
+        com.zeroc.Ice.ObjectAdapter adapter;
+        while (true) {
+        	try {
+        	adapter = this.incCommunicator.createObjectAdapterWithEndpoints("WarningGenerator", "default -p " + Integer.toString(currentPort));
+        	} catch (com.zeroc.Ice.SocketException e) {
+        		currentPort++;
+        		continue;
+        	}
+        	break;
+        }
+        System.out.println("currentport: " + currentPort);
+
+        com.zeroc.Ice.Object object = new WarningGeneratorI();
+
+        adapter.add(object, com.zeroc.Ice.Util.stringToIdentity("WarningGen"));
+        adapter.activate();
+
     	communicator = com.zeroc.Ice.Util.initialize();
         com.zeroc.Ice.ObjectPrx base = communicator.stringToProxy("infoProvider:default -p 10055");
         provider = UiInteractorPrx.checkedCast(base);
@@ -88,14 +110,6 @@ public class EnviroAppUI {
         	System.exit(1);
         }
         
-        this.incCommunicator = com.zeroc.Ice.Util.initialize();
-    	
-        com.zeroc.Ice.ObjectAdapter adapter = this.incCommunicator.createObjectAdapterWithEndpoints("WarningGenerator", "default -p 10066");
-        com.zeroc.Ice.Object object = new WarningGeneratorI();
-
-        adapter.add(object, com.zeroc.Ice.Util.stringToIdentity("WarningGen"));
-        adapter.activate();
-        
         System.out.println("Adapter activated. Waiting for data.");
 
     	this.name = name;
@@ -107,8 +121,9 @@ public class EnviroAppUI {
         BufferedReader reader =
         		new BufferedReader(new InputStreamReader(System.in));
         String name = reader.readLine();
-        
-        EnviroAppUI mainClient = new EnviroAppUI(name);
+
+        EnviroAppUI mainClient = new EnviroAppUI(name.toLowerCase());
+
      	System.out.println("Context-aware Enviro Smart Application Main Menu");
      	mainClient.doLoop();
      	// TODO DATE TIME
@@ -172,6 +187,7 @@ public class EnviroAppUI {
         for (String infoLine:response.info) {
         	System.out.println(infoLine);
         }
+       	System.out.println();
     }
     
     private void itemAtLoc() {

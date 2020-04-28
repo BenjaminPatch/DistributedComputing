@@ -3,6 +3,8 @@ package components;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,13 +65,20 @@ public class LocationServer {
 
 		@Override
 		public void processPreLocation(String name, String loc, Current current) {
-			System.out.println("LOCATION RECEIVED: " + loc + ":" + locToInOutside.get(loc));
-			locManager.processLocation(name, loc);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received AllSensors \"" + name + " " + loc + "\"");
+
+			System.out.println(dtf.format(now) + " Sent \"" + name + " " + loc + " " + locToInOutside.get(loc) + "\"");
+			locManager.processLocation(name, loc, locToInOutside.get(loc));
 		}
 
 		@Override
 		public String respondToIndoorResponse(String indoorOrOutdoor, Current current) {
-			System.out.println("indoor/outdoor response received: "  + indoorOrOutdoor);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received ContextManager \"" + indoorOrOutdoor + "\"");
+
 			String returnValue = "";
 
 			for (String loc: inOutsideToLoc.get(indoorOrOutdoor)) {
@@ -156,18 +165,14 @@ public class LocationServer {
     	LocationServer server = new LocationServer();
     	server.communicator = com.zeroc.Ice.Util.initialize(args);
     	
-    	System.out.println("Server starting.");
-        
         com.zeroc.Ice.ObjectAdapter adapter = server.communicator.createObjectAdapterWithEndpoints("LocationServer", "default -p 10023");
         com.zeroc.Ice.Object object = new LocationMiddlemanWorkerI(args[0]);
 
         adapter.add(object, com.zeroc.Ice.Util.stringToIdentity("LocationMiddleman"));
         adapter.activate();
         
-        System.out.println("Adapter activated. Waiting for data.");
         server.communicator.waitForShutdown();
         
-        System.out.println("Server ending");
 		Communicator communicator = 
 				com.zeroc.Ice.Util.initialize(null, "configfiles\\config.sub");
 		

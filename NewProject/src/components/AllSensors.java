@@ -3,6 +3,8 @@ package components;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -165,9 +167,14 @@ public class AllSensors {
 			for (int i = 0; i < Integer.parseInt(splitLine[1]); i++) {
 				if (communicator.isShutdown()) {
 					break;
-				}
-				try {
-					System.out.println("sending: " + splitLine[0] + function);
+				} try {
+					DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+					LocalDateTime now = LocalDateTime.now();
+					if (Character.isLetter(splitLine[0].charAt(0))) {
+						System.out.println(dtf.format(now) + " Sent LocationServer \"" + username + " " + splitLine[0] + "\"");
+					} else {
+						System.out.println(dtf.format(now) + " Sent \"" + username + " " + splitLine[0] + "\"");
+					}
 					function.accept(username, splitLine[0]);
 					Thread.sleep(1000);
 				} catch (NumberFormatException e) {
