@@ -1,17 +1,16 @@
 package components;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
-import com.zeroc.Ice.ObjectPrx;
-import com.zeroc.IceStorm.TopicPrx;
 
 import EnviroSmart.PreferenceManager;
 import javafx.util.Pair;
@@ -19,7 +18,6 @@ import javafx.util.Pair;
 public class PreferenceRepository {
 	public static class PreferenceManagerI implements PreferenceManager {
 		private Map<String, Preference> preferences; // Maps a name to Preference type
-		private String filename;
 		private Communicator communicator;
 		private static final String MEDICAL_CONDITION = "med";
 		private static final String TEMP_PREF = "pref1";
@@ -28,13 +26,15 @@ public class PreferenceRepository {
 		
 		public PreferenceManagerI(String filename, Communicator communicator) {
 			super();
-			this.filename = filename;
 			this.preferences = readPreferenceFile(filename);
-			System.out.println(this.preferences.get("bryan").getPref3());
 		}
 
 		@Override
 		public String getSuggestion(String nameAndEvent, Current current) {
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received ContextManager\"" + nameAndEvent + "\"");
+
 			String[] nameEvent = nameAndEvent.split(",");
 			Preference prefs = preferences.get(nameEvent[0].trim());
 			switch (nameEvent[1].trim().toLowerCase()) {
@@ -52,7 +52,10 @@ public class PreferenceRepository {
 		
 		@Override
 		public String processPreferenceRequest(String name, String req, Current current) {
-			System.out.println("Request received at pref repository: " + req);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received ContextManager\"" + name + " " + req + "\"");
+
 			Preference relevantPref = preferences.get(name);
 			if (relevantPref == null) {
 				return null;
@@ -76,7 +79,13 @@ public class PreferenceRepository {
 			
 			// Read all lines into LinkedList
 			try {
-				BufferedReader reader = new BufferedReader(new FileReader(filename));
+				BufferedReader reader = null;
+				try {
+					reader = new BufferedReader(new FileReader(filename));
+				} catch (FileNotFoundException e) {
+					System.out.println("Error: Cannot access " + filename + ". Check the file name, and that the file exists. Program exiting");
+					System.exit(1);
+				}
 				String line;
 				while (true) {
 					Preference newPref = new Preference(null, null, null, null, null);
@@ -183,10 +192,6 @@ public class PreferenceRepository {
 
 	}
 
-	private Communicator communicator;
-    private static TopicPrx incomingProxy;
-    private final static String PROXY = "TopicManager.Proxy";
-
     public static void main(String[] args) {
         if (args.length != 1) {
             System.err.println("usage: PreferenceRepository.java [filename]");
@@ -194,15 +199,12 @@ public class PreferenceRepository {
         }
     	Communicator communicator = com.zeroc.Ice.Util.initialize(args);
     	
-    	System.out.println("Server starting.");
-        
         com.zeroc.Ice.ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints("PreferenceRepository", "default -p 10034");
         com.zeroc.Ice.Object object = new PreferenceManagerI(args[0] + ".txt", communicator);
 
         adapter.add(object, com.zeroc.Ice.Util.stringToIdentity("preferenceRepo"));
         adapter.activate();
         
-        System.out.println("Adapter activated. Waiting for data.");
         communicator.waitForShutdown();
     }
 }

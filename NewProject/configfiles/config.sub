@@ -27,7 +27,7 @@ TopicManager.Proxy=EnviroSmart/TopicManager:default -h localhost -p 10000
 # 2 = like 1, but more detailed
 # 3 = like 2, but also trace data transfer
 #
-Ice.Trace.Network=2
+#Ice.Trace.Network=2
 
 #
 # IceMX configuration.

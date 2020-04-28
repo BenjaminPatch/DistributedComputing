@@ -3,15 +3,14 @@ package components;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
 
 import EnviroSmart.UiInteractorPrx;
 import EnviroSmart.WarningGenerator;
-import javafx.scene.shape.Line;
-
-// TODO: When user exits, send logout message
 
 public class EnviroAppUI {
 	
@@ -20,6 +19,7 @@ public class EnviroAppUI {
 		@Override
 		public void generateWarning(String type, int value, int threshold, String currentLocation, String suggestion,
 				int weatherAlarm, Current current) {
+			printDateTime();
 			if (type.equalsIgnoreCase("temp")) {
 				printTempWarning(value, threshold);
 			} else if (type.equalsIgnoreCase("aqi")) {
@@ -56,9 +56,12 @@ public class EnviroAppUI {
 				type = "HAIL STORM";
 			} else if (value == 3) {
 				type = "STRONG WIND";
+			} else {
+				System.err.println("Invalid message received from Context Manager");
+				return;
 			}
 			System.out.println("Warning, EXTREME WEATHER detected, "
-					+ "the current weather event is " + value);
+					+ "the current weather event is " + type);
 		}
 
 		private void printAqiWarning(int value, int threshold) {
@@ -77,8 +80,8 @@ public class EnviroAppUI {
         this.incCommunicator = com.zeroc.Ice.Util.initialize();
         
         int currentPort = 10066;
-    	
         com.zeroc.Ice.ObjectAdapter adapter;
+        // This loop is for the case of multiple UIs running at the same time
         while (true) {
         	try {
         	adapter = this.incCommunicator.createObjectAdapterWithEndpoints("WarningGenerator", "default -p " + Integer.toString(currentPort));
@@ -88,7 +91,6 @@ public class EnviroAppUI {
         	}
         	break;
         }
-        System.out.println("currentport: " + currentPort);
 
         com.zeroc.Ice.Object object = new WarningGeneratorI();
 
@@ -110,9 +112,14 @@ public class EnviroAppUI {
         	System.exit(1);
         }
         
-        System.out.println("Adapter activated. Waiting for data.");
-
     	this.name = name;
+    }
+    
+    private static void printDateTime() {
+		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+		LocalDateTime now = LocalDateTime.now();
+		System.out.println("------------------------- " + dtf.format(now) + " -------------------------");
+    	
     }
 
     public static void main(String[] args) throws IOException {
@@ -124,6 +131,7 @@ public class EnviroAppUI {
 
         EnviroAppUI mainClient = new EnviroAppUI(name.toLowerCase());
 
+        printDateTime();
      	System.out.println("Context-aware Enviro Smart Application Main Menu");
      	mainClient.doLoop();
      	// TODO DATE TIME
@@ -155,12 +163,11 @@ public class EnviroAppUI {
         	break;
         case "e":
         	System.out.println("CLOSING, May take up to 60 seconds");
-        	// TODO exit procedure
+        	provider.signOut(name);
         	System.exit(0);
         	break;
         default:
         	System.out.println("Invalid input");
-        	// TODO what to do here
         }
     }
     

@@ -19,6 +19,7 @@ module EnviroSmart
     	Location getInfoGivenLoc(string loc);
     	string getInfoCurrentLoc(string name);
     	bool logIn(string name);
+		void signOut(string name);
     }
     
     interface WarningGenerator

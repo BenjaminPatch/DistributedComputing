@@ -1,14 +1,12 @@
 package components;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 import com.zeroc.Ice.Communicator;
 
 import EnviroSmart.AlarmManagerPrx;
-
-import components.Util;
 
 /*
  * Send a message every 60 seconds with new weather information
@@ -72,6 +70,11 @@ public class WeatherAlarm extends Thread {
 					System.err.println("Error in weather alarm");
 					System.exit(1);
 				}
+
+				DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+				LocalDateTime now = LocalDateTime.now();
+				System.out.println(dtf.format(now) + " Sent \"" + line + "\"");
+
 				alarmManager.processAlarmMessage(line);
 				try {
 					Thread.sleep(60 * 1000);

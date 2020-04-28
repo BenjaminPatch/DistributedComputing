@@ -1,6 +1,7 @@
 package components;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -10,13 +11,11 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
 import com.zeroc.Ice.ObjectPrx;
-import com.zeroc.IceStorm.AlreadySubscribed;
-import com.zeroc.IceStorm.BadQoS;
-import com.zeroc.IceStorm.InvalidSubscriber;
 import com.zeroc.IceStorm.TopicPrx;
 
 import EnviroSmart.APManager;
@@ -69,7 +68,6 @@ public class ContextManager {
 			String returnMessage = "";
 			List<Location> locNames = locs.get(loc);
 			for (Location cur : locNames) {
-				System.out.println(returnMessage);
 				returnMessage = returnMessage.concat(cur.getName() + ", ");
 			}
 			return returnMessage.substring(0, returnMessage.length() -2).trim();
@@ -83,13 +81,22 @@ public class ContextManager {
 
 			PreferenceManagerPrx prefManager = getPrefRepo().getKey();
 			String tempPref = prefManager.processPreferenceRequest(name, "pref1");
-			if (tempPref == null) {
+
+			if (tempPref == null || tempPref.length() == 0) {
 				return false;
 			}
 			userLocations.putIfAbsent(name, ""); // managers now know to start
 			tempThresholds.put(name, Integer.parseInt(tempPref.split(":")[0]));
 			userComms.put(name, getWarningGen());
 			return true;
+		}
+		
+		@Override
+		public void signOut(String name, Current current) {
+			userLocations.remove(name);
+			if (userLocations.isEmpty()) {
+				shutdown.set(true);
+			}
 		}
 	}
 
@@ -103,13 +110,19 @@ public class ContextManager {
     	
 		@Override
 		public void processTemperature(String name, String temp, Current current) {
-			System.out.println("TEMP: " + temp);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received EnviroAppUI \"" + name + "\"");
+
 			Integer threshold = tempThresholds.get(name);
 			if (threshold == null) {
 				return;
 			}
 			Integer newTemp = Integer.parseInt(temp);
 			
+			System.out.println(dtf.format(now) + " Sent EnviroAppUi \"temp " + newTemp + 
+					" " + threshold + " " + userLocations.get(name) + " " +
+					generateSuggestion(name, "temp") + " " + weather);
 			// Greater than threshold AND there has been a change
 			if (!isAboveThreshold && newTemp >= threshold && newTemp != userTemps.get(name)) {
 				userComms.get(name).getKey().generateWarning(
@@ -135,11 +148,14 @@ public class ContextManager {
 		public void processAQI(String name, String aqi, Current current) {
 			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
 			LocalDateTime now = LocalDateTime.now();
-			System.out.println(dtf.format(now) + " Received \"" + name + aqi + "\"");
-
+			System.out.println(dtf.format(now) + " Received \"" + name + " " + aqi + "\"");
 
 			Pair<Integer, Integer> apoAndDuration = userApos.get(name);
 			int aqiInt = Integer.parseInt(aqi);
+			
+			if (userLocations.get(name) == null) {
+				return;
+			}
 
 			System.out.println(dtf.format(now) + " Sent LocationServer \"" + 
 					getLocManager().getKey().getInOrOut(userLocations.get(name) + "\""));
@@ -175,9 +191,11 @@ public class ContextManager {
 				if (isAlreadyIn.get(name) == true) {
 					return;
 				}
+
 				System.out.println(dtf.format(now) + " Sent EnviroAppUi \"aqi " + aqi + 
 						" " + threshold + " " + userLocations.get(name) +  
 						generateSuggestion(name, "aqi") + weather + "\"");
+
 				userComms.get(name).getKey().generateWarning("aqi", aqiInt,
 						threshold, userLocations.get(name), generateSuggestion(name, "aqi"), weather);
 				isAlreadyIn.put(name, true);
@@ -190,8 +208,11 @@ public class ContextManager {
     public static class LocationManagerI implements LocationManager {
 		@Override
 		public void processLocation(String name, String loc, String indoorOutdoor, Current current) {
-			// TODO: Reset apo timer when location changes from indoor to outdoor
-			System.out.println("LOC: " + loc + " " + name);
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received \"" + name + " " + loc +
+					" " + indoorOutdoor + "\"");
+
 			String previousLoc = userLocations.get(name);
 			if (previousLoc == null) {
 				return;
@@ -201,18 +222,15 @@ public class ContextManager {
     }
 
     public static class AlarmManagerI implements AlarmManager {
-    	private static final int NORMAL = 0;
-    	private static final int RAIN = 1;
-    	private static final int STORM = 2;
-    	private static final int WIND = 3;
 
 		@Override
 		public void processAlarmMessage(String incomingWeather, Current current) {
-			System.out.println("weather status:" + incomingWeather);
-			int newWeather = Integer.parseInt(incomingWeather);
-			weather = newWeather;
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			System.out.println(dtf.format(now) + " Received \"" + incomingWeather + "\"");
+			weather = Integer.parseInt(incomingWeather);
 			for (String name: userLocations.keySet()) {
-				userComms.get(name).getKey().generateWarning("alarm", newWeather, -1, userLocations.get(name), generateSuggestion(name, "alarm"), weather);
+				userComms.get(name).getKey().generateWarning("alarm", weather, -1, userLocations.get(name), generateSuggestion(name, "alarm"), weather);
 			}
 		}
     }
@@ -268,7 +286,6 @@ public class ContextManager {
         	}
     		break;
     	}
-    	System.out.println("PORT: " + port);
         WarningGeneratorPrx manager = WarningGeneratorPrx.checkedCast(base);
         
         if(manager == null) {
@@ -298,20 +315,20 @@ public class ContextManager {
     private static TopicPrx weatherProxy;
     private static Map<String, Integer> tempThresholds;
     private static Map<String, Integer> userTemps; // Stores the user's temperature
-    private static Map<String, String> apoThresholds;
     private static Map<String, Pair<Integer, Integer>> userApos; // Map user to APO and duration
     private static Map<String, String> userLocations; // Store users locs at any given time
     private static int weather; // Current weather condition
 	private static Map<String, List<Location>> locs; // Stores the information about all locations
 	private static Map<String, Pair<WarningGeneratorPrx, Communicator>> userComms;
+	private static AtomicBoolean shutdown;
 	
     public static void main(String[] args) {
         if (args.length != 1) {
             System.err.println("usage: ContextManager.java [filename]");
             System.exit(1);
         }
+        shutdown = new AtomicBoolean(false);
         tempThresholds = new HashMap<>();
-        apoThresholds = new HashMap<>();
         userApos = new HashMap<>();
         userLocations = new HashMap<>();
         userTemps = new HashMap<>();
@@ -337,6 +354,7 @@ public class ContextManager {
             ex.printStackTrace();
             status = 1;
         }
+        System.exit(status);
     }
 
 	public static int run(Communicator communicator, Thread destroyHook, String[] args) {
@@ -397,7 +415,15 @@ public class ContextManager {
             }
         }));
         Runtime.getRuntime().removeShutdownHook(destroyHook); // remove old destroy-only shutdown hook
-        rmiCommunicator.waitForShutdown();
+        
+        while (!shutdown.get()) {
+        	try {
+        		Thread.sleep(1000);
+        	} catch (InterruptedException e) {
+        		//
+        	}
+        }
+        System.exit(0);
 		return 0;
 	}
 	
@@ -410,7 +436,13 @@ public class ContextManager {
 		
 		// Read all lines into LinkedList
 		try {
-			BufferedReader reader = new BufferedReader(new FileReader(filename));
+			BufferedReader reader = null;
+			try {
+				reader = new BufferedReader(new FileReader(filename));
+			} catch (FileNotFoundException e) {
+				System.out.println("Error: Cannot access " + filename + ". Check the file name, and that the file exists. Program exiting");
+				System.exit(1);
+			}
 			String line;
 			while (true) {
 				Location newLoc = new Location(null, null, new LinkedList<>(), new LinkedList<>());
